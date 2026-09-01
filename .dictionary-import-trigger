@@ -1,1 +1,2 @@
 Trigger one-time import of the verified Arabic dictionary sources.
+retry: pinned-lisan-source
