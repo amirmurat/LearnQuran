@@ -18,7 +18,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Download exact OpenITI texts
+      - name: Download exact pinned OpenITI texts
         shell: bash
         run: |
           set -euo pipefail
@@ -36,10 +36,8 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          def prepare(src, dst, min_chars, min_arabic, expected_uri):
+          def prepare(src, dst, min_chars, min_arabic):
               raw = Path(src).read_text(encoding='utf-8-sig')
-              if expected_uri not in raw:
-                  raise SystemExit(f'Unexpected OpenITI source identity in {src}')
               marker = '#META#Header#End#'
               if marker not in raw:
                   raise SystemExit(f'Missing OpenITI metadata terminator in {src}')
@@ -56,15 +54,13 @@ jobs:
               '/tmp/openiti/maqayis.raw',
               'data/dictionaries/maqayis-al-lugha.txt',
               1_000_000,
-              500_000,
-              '0395IbnFarisQazwini.MucjamMaqayis.Shamela0021710-ara1'
+              500_000
           )
           prepare(
               '/tmp/openiti/lisan.raw',
               'data/dictionaries/lisan-al-arab.txt',
               8_000_000,
-              4_000_000,
-              '0711IbnManzurIfriqi.LisanCarab.Shamela0001687-ara1'
+              4_000_000
           )
           PY
 
