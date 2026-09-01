@@ -1,0 +1,109 @@
+name: Import Arabic dictionaries
+
+on:
+  pull_request:
+    paths:
+      - '.dictionary-import-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  import-dictionaries:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download exact OpenITI texts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/openiti data/dictionaries
+          curl --fail --location --retry 3 \
+            'https://raw.githubusercontent.com/OpenITI/RELEASE/cfc4157a3cf2054c0888f133970a4eaa3e22e58c/data/0395IbnFarisQazwini/0395IbnFarisQazwini.MucjamMaqayis/0395IbnFarisQazwini.MucjamMaqayis.Shamela0021710-ara1' \
+            -o /tmp/openiti/maqayis.raw
+          curl --fail --location --retry 3 \
+            'https://raw.githubusercontent.com/OpenITI/RELEASE/cfc4157a3cf2054c0888f133970a4eaa3e22e58c/data/0711IbnManzurIfriqi/0711IbnManzurIfriqi.LisanCarab/0711IbnManzurIfriqi.LisanCarab.Shamela0001687-ara1' \
+            -o /tmp/openiti/lisan.raw
+
+      - name: Remove OpenITI metadata header and verify Arabic content
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def prepare(src, dst, min_chars, min_arabic, required_terms):
+              raw = Path(src).read_text(encoding='utf-8-sig')
+              marker = '#META#Header#End#'
+              if marker not in raw:
+                  raise SystemExit(f'Missing OpenITI metadata terminator in {src}')
+              body = raw.split(marker, 1)[1].lstrip('\r\n')
+              if len(body) < min_chars:
+                  raise SystemExit(f'{src} is unexpectedly short: {len(body)} chars')
+              arabic = sum(1 for ch in body if '\u0600' <= ch <= '\u06ff')
+              if arabic < min_arabic:
+                  raise SystemExit(f'{src} has too little Arabic text: {arabic} Arabic chars')
+              for term in required_terms:
+                  if term not in body:
+                      raise SystemExit(f'{src} is missing expected Arabic term: {term}')
+              Path(dst).write_text(body, encoding='utf-8', newline='\n')
+              print(f'VERIFIED {dst}: chars={len(body)} arabic_chars={arabic}')
+
+          prepare(
+              '/tmp/openiti/maqayis.raw',
+              'data/dictionaries/maqayis-al-lugha.txt',
+              1_000_000,
+              500_000,
+              ['ابن فارس', 'مقاييس']
+          )
+          prepare(
+              '/tmp/openiti/lisan.raw',
+              'data/dictionaries/lisan-al-arab.txt',
+              8_000_000,
+              4_000_000,
+              ['ابن منظور', 'لسان العرب']
+          )
+          PY
+
+      - name: Record exact provenance
+        shell: bash
+        run: |
+          cat > data/dictionaries/SOURCES.md <<'EOF'
+          # Arabic dictionary sources
+
+          These files contain Arabic dictionary text only; no translation or tafsir was added by this repository.
+
+          ## معجم مقاييس اللغة
+          - Author: أحمد بن فارس (ت 395هـ)
+          - OpenITI work: `0395IbnFarisQazwini.MucjamMaqayis`
+          - Version: `0395IbnFarisQazwini.MucjamMaqayis.Shamela0021710-ara1`
+          - Source snapshot: OpenITI/RELEASE commit `cfc4157a3cf2054c0888f133970a4eaa3e22e58c`
+          - Stored file: `maqayis-al-lugha.txt`
+
+          ## لسان العرب
+          - Author: ابن منظور الإفريقي (ت 711هـ)
+          - OpenITI work: `0711IbnManzurIfriqi.LisanCarab`
+          - Version: `0711IbnManzurIfriqi.LisanCarab.Shamela0001687-ara1`
+          - Source snapshot: OpenITI/RELEASE commit `cfc4157a3cf2054c0888f133970a4eaa3e22e58c`
+          - Stored file: `lisan-al-arab.txt`
+
+          The only transformation applied to the two text files was removal of the OpenITI metadata header before `#META#Header#End#`; the dictionary body was otherwise kept as supplied by OpenITI.
+          EOF
+
+      - name: Commit dictionaries to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/dictionaries
+          if git diff --cached --quiet; then
+            echo 'No dictionary changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Add Arabic classical dictionaries'
+          git push origin HEAD:main
