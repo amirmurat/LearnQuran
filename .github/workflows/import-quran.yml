@@ -52,7 +52,7 @@ jobs:
 
           first = ayahs[0]
           last = ayahs[-1]
-          if 'بِسْمِ' not in first or 'ٱلنَّاسِ' not in last and 'النَّاسِ' not in last:
+          if 'بِسْمِ' not in first or ('ٱلنَّاسِ' not in last and 'النَّاسِ' not in last):
               raise SystemExit('Boundary ayah verification failed')
 
           arabic = re.compile(r'[\u0600-\u06FF]')
@@ -75,3 +75,5 @@ jobs:
           fi
           git commit -m "Add verified Arabic Quran text (Tanzil Uthmani v1.1)"
           git push
+
+# Second commit intentionally triggers this workflow after it exists on main.
